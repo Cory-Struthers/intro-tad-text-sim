@@ -1,0 +1,496 @@
+---
+title: "Text Similarity"
+subtitle: "Introduction to Text as Data"
+author: "Amber Boydstun & Cory Struthers"
+date: "April 27-29, 2023"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  html_notebook:
+    code_folding: show
+    highlight: tango
+    theme: united
+    toc: yes
+    df_print: paged
+---
+
+```{r, setup, include=FALSE, echo=FALSE, message=FALSE}
+knitr::opts_knit$set(root.dir = "/Users/cs86487/Dropbox/text-as-data-JUST-CORY-AND-AMBER/modules/data/")
+```
+
+
+### Introduction
+
+There are a number of approaches to text similarity, but we'll focus pairwise comparisons. "Pairwise" means that the terms of each document in the corpus are compared to the terms of every other document in the corpus. Pairwise comparison is a "bag of words" approach, meaning the frequency of terms influence the output but the order of the terms do not.
+
+We will need the following packages:
+
+```{r, message=FALSE}
+
+library(quanteda)
+library(quanteda.textstats)
+library(tidyverse)
+library(ggplot2)
+library(ggdendro)
+library(comperes)
+library(readxl)
+library(igraph)
+library(tidytext)
+
+options("scipen"=100, "digits"=4)
+
+# Set working directory
+setwd("/Users/cs86487/Dropbox/text-as-data-JUST-CORY-AND-AMBER/modules/data/")
+getwd() # view working directory
+
+```
+
+Most text similarity methods are vector space models, which use linear algebra to more directly leverage word counts to represent meaningful differences (or lack thereof) between two or more texts. Unlike dictionary methods, which count and emphasize terms the researcher designates, text similarity uses _all terms_ in a vector (i.e., the document converted to a row in a dfm) to evaluate similarity -- ignoring the latent concept driving the frequent or infrequent use of equivelent terms. For this reason, crafting the dfm carefully in the pre-processing stage is essential.
+
+`quanteda` offers two functions related to text (dis)similarity. Both return a _D_ x _D_ symmetrical matrix, where _D_ is equal to the number of documents (however grouped) in the corpus. 
+
+Let's begin with a toy example, completing pre-processing steps as usual. Note that removing stopwords are particularly important in text similarity approaches because stopwords will drive similarity between texts despite being conceptually meaningless.
+
+```{r}
+
+# Toy example
+energy = c(position1 = "We must adapt our energy infrastructure to climate change.",
+            position2 = "Low income people are harmed by renewable energy commitments.",
+            position3 = "Health and climate benefits are core factors in determining energy policy.",
+            position4 = "Energy policy should prioritize keeping electricty prices low for people.")
+
+# Construct dfm
+energy_dfm = corpus(energy) %>%
+    quanteda::tokens(remove_punct = TRUE) %>% # specify quanteda because tidytext loaded
+    tokens_remove(stopwords("en"))  %>%
+    tokens_wordstem() %>%
+    dfm()
+energy_dfm 
+
+```
+
+### Apply Euclidean distance
+
+The Euclidean distance between two vectors, _*a*_ and _*b*_, is calculated as:
+
+<center>
+$\boldsymbol{a} - \boldsymbol{b} = \sqrt{(\sum^n_1{(a_i-b_i)^2}}$
+</center>
+
+
+Euclidean distance ranges from 0 to values greater than 1. Larger values indicate greater distance, or less similarity, while smaller values mean less distance, or greater similarity. Below, we apply the calculation from the `textstat_dist` function. `textstat_dist` calcualtes the _distance_ between two vectors, applying `euclidean`, `Chisquared`, `minkowski`, or other methods as options the researcher specifies. `euclidean` is the most common and the default method for `textstat_dist()`.
+
+After applying `textstat_dist`, we'll calculate pairwise comparisons "by hand" to improve our understanding of this pairwise approach.
+
+```{r, message=FALSE}
+
+# Euclidean distance quanteda function
+energy_dist = textstat_dist(energy_dfm , method = "euclidean") # default
+print(energy_dist)
+
+# First, reshape dfm object so columns are each text and rows are features
+energy_dfm_reshaped = tidy(energy_dfm) %>% # using tidytext
+  cast_dfm(term, document, count)  %>% # using tidytext
+  convert("data.frame")
+
+# Euclidean distance calculation
+euclidean_dist = function(a,b) sqrt(sum((a - b)^2))
+
+# Apply to lowest and highest observed distances
+euclidean_dist(energy_dfm_reshaped$position2, energy_dfm_reshaped$position4) # least distant (lowest value)
+euclidean_dist(energy_dfm_reshaped$position2, energy_dfm_reshaped$position3) # most distant (highest value)
+
+
+```
+
+The output suggests position2 and position3 are most distant from one another (3.61), whereas position2 and position4 are the least distant to one another (3.00). 
+
+\
+
+---
+
+**Question 1: Based on the text, do you agree with this assessment or other calculated values based on the text? Why or why not?**
+
+---
+
+\
+
+
+### Apply cosine similarity
+
+Now let's do apply cosine similarity using `textstat_simil`. The cosine similarity of two vectors, A and B, is calculated as:  
+
+<center>
+Cosine similarity = $\frac{ \boldsymbol{a}}{|| \boldsymbol{a}||}.\frac{ \boldsymbol{b}}{|| \boldsymbol{b}||} = \frac{\sum_ia_ib_i}{(\sqrt{\sum_ia^2_i}(\sqrt{\sum_ib^2_i}}$
+</center>
+
+Cosine similarity scores range from -1 to 1 for word frequencies. The inverse of euclidean distance, larger values in cosine similarity indicate greater similarity, or less distance, while smaller values mean less similarly, or greater distance. Methods options for `textstat_simil` include `cosine`, `correlation`, `jaccard`, among others. `cosine` is the default and currently the most popular.
+
+```{r, message=FALSE}
+
+# Cosine similarity quanteda function
+energy_simil = textstat_simil(energy_dfm, method="cosine")
+print(energy_simil)
+
+# Cosine similarly calculation
+cosine_sim = function(a, b) {
+  return(sum(a*b)/sqrt(sum(a^2)*sum(b^2)) )
+}  
+
+# Again, using reshaped dfm
+cosine_sim(energy_dfm_reshaped$position2, energy_dfm_reshaped$position4)
+cosine_sim(energy_dfm_reshaped$position2, energy_dfm_reshaped$position3)
+
+
+```
+
+This output suggests position2 and position3 are least similar (0.134), whereas position2 and position4 are most similar (0.309). Aha! The two approaches produce nearly equivalent results, but mirroring one another. Reviewing the texts in our toy example, we might imagine that a researcher has asked respondents to describe their position on energy policy in an open-ended survey question. In addition to understanding the latent dimensions people care about in regards to this policy domain, the researcher might hypothesize that respondents with similar attributes (ideology, class) offer similar responses. This point brings us back again to grouping and nestedness in our data, which we'll revisit shortly.
+
+One reason cosine similarity is often used over Euclidean distance for larger corpora is the former normalizes for magnitude, or document length, by comparing the angle of the vectors. Let's experiment with our toy example to see what happens when we make position4 a much longer document.
+
+```{r, message=FALSE}
+
+# Experimental example
+energy_exp = c(position1 = "We must adapt our energy infrastructure to climate change.",
+            position2 = "Low income people are harmed by renewable energy commitments.",
+            position3 = "Health and climate benefits are core factors in determining energy policy.",
+            position4 = "Energy policy should prioritize keeping electricty prices low for people. The rest of this text is substantively meaningless. Let's see what happens to our measures when we have a really long document compared to the rest of the documents.")
+
+# Construct dfm
+exp_dfm = corpus(energy_exp) %>%
+    quanteda::tokens(remove_punct = TRUE) %>%
+    tokens_remove(stopwords("en"))  %>%
+    tokens_wordstem() %>%
+    dfm()
+
+# Apply Euclidean distance
+exp_dist = textstat_dist(exp_dfm, method = "euclidean") 
+print(exp_dist)
+
+```
+Before, position2 and postion4 were least distant (3.00). Now, position2 and position4 (5.10) are more distant than position1 and position2 (3.32) and position2 and position3 (3.16).
+
+Let's try cosine similarity, which normalizes for document length.
+
+```{r, message=FALSE}
+
+# Apply cosine similarity
+exp_simil = textstat_simil(exp_dfm, method="cosine")
+print(exp_simil)
+
+```
+Before, position2 and position4 were most similar (0.309). Like Euclidean distance, the value has changed but not as much. Now, position2 and position4 (0.227) are less similar than position1 and position3 (0.289) but not position1 and position2 (0.154).
+
+
+### Visualization through hierarchical clustering
+
+Now let's try each of these tools on a larger corpus. Like always, we first tokenize and convert the text to a document-feature matrix. Below, we use the news corpus, first applying collocation analysis to identify common capitalized bi- and tri-grams, and then adding them to the tokens object. 
+
+Importantly, and depending on the research question and data, TF-IDF weights are appropriate or preferred to unweighted term counts in the DFM. For simplicity, we stick with unweighted term counts in our example.
+
+```{r, message=FALSE}
+
+# load news corpus
+news_corp = readRDS("news_corp.RDS")
+
+# Create tokens object
+news_toks = news_corp %>%
+    quanteda::tokens(remove_punct = TRUE,
+           remove_numbers = TRUE, 
+           remove_symbols = TRUE) %>%
+  tokens_remove(stopwords("en")) # remove stopwords in tokens
+
+# Identify collocations
+news_cols = tokens_select(news_toks, pattern = "^[A-Z]", 
+                                valuetype = "regex", 
+                                case_insensitive = FALSE) %>% 
+                  textstat_collocations(min_count = 10, size=2:3) # specify size
+View(news_cols)
+
+# Incorporate collocations into dfm toks
+news_dfm =  tokens_compound(news_toks, news_cols, concatenator = " ") %>%
+    tokens_wordstem ()%>% # stem words after adding collocations
+    dfm(tolower = TRUE)  %>% 
+    dfm_trim(min_termfreq = 10, min_docfreq = 10)  
+
+# Observe collocations ("united st")
+textstat_frequency(news_dfm) %>%
+  head(50)
+
+```
+
+Conceivably, we might be interested in whether stories produced by similar outlets utilize more or less similar terms. We can group our dfm by "Source" to explore support for this premise. Like we've done in prior modules, we can group the dfm by source and then use `textstat_dist` to first compare the pairwise euclidean distance of the 14 sources in our corpus.
+
+`quanteda` offers an option for easy and useful visualization of distance scores, particularly when grouped. After grouping the dfm and calculating euclidean distance across all pairs, we can visualize similarity scores across texts by different news sources using `hclust`, which is part of base R. `hclust` conducts hierarchical cluster analysis on the (dis)similiarities of the objects (in our case, texts by different media sources). As shown below, we add the `dist` function to convert the object to an object compatible with `hclust` to create the dendogram.
+
+```{r, message=FALSE}
+
+# Group dfm by news Source
+news_dfm_sources = dfm_group(news_dfm, groups = Source)
+ndoc(news_dfm_sources) # 14 groups
+
+# Euclidean distance quanteda function 
+news_dist = as.dist(textstat_dist(news_dfm_sources, method = "euclidean")) 
+print(news_dist)
+
+# Apply cluster analysis
+news_source_clust = hclust(news_dist)
+
+```
+
+`ggdendrogram` in the `ggdendro` package will plot clusters from the `textstat_dist` matrix. A dendrogram is a tree diagram representing clustered observations, where "leaves" (the vertical, terminal lines) are nested in a branch (or clade, the horizontal lines). Both branches (the sub-organizational structure) and leaves (the magnitude) provide visual aid to clustering tendencies in the data. Separate branches indicate distinct clusters, and -- for dissimilarity score -- the higher the branch, the more dissimiliar the clusters. Likewise, the taller the leaves, the more dissimilar the scores among that clustered group. 
+
+<center>![](/Users/cs86487/Dropbox/text-as-data-JUST-CORY-AND-AMBER/images/What-is-a-Dendrogram.webp){width="60%"}</center>
+
+Note that the left-right orientation is irrelevant and that dendrograms cannot tell us how many clusters exist in the data. 
+
+```{r, message=FALSE}
+
+# Plot dendrogram
+ggdendrogram(news_source_clust, rotate = TRUE) +
+  labs( xlab="Distance", title="Dendogram of News Articles by Source Using Euclidean Distance")
+
+```
+
+The dendrogram suggests (but does not confirm) that articles produced by two major national news outlets, New York Times and Washington Post, are a distinct cluster -- uniquely different from all other news sources. But the *height of the leaves* suggest they are not the most similar to one another, compared to all other clsuters. Articles produced by news outlets in the same geographic region -- the Tampa Bay Times, Palm Beach Post, and St. Petersburg Times (all in Florida) -- not only cluster together, but have much greater similarity to one another (as indicated by shorter leaves). Geographic clustering may be driven by stories that focus on the state or region.
+
+Although top features do not paint the full picture, they can give us some intuition of the terms driving distance (or similarity) among units. Let's plot the top 15 terms by source.
+
+
+```{r, message=FALSE, fig1, fig.height = 12, fig.width = 14}
+
+# Sort by reverse frequency order
+freq_sources = textstat_frequency(news_dfm_sources, n = 15, 
+                                  groups = news_dfm_sources$Source)
+
+# Plot
+ggplot(data = freq_sources , aes(x = nrow(freq_sources):1, y = frequency)) +
+     geom_point() +
+     theme(text = element_text(size=24)) +
+     facet_wrap(~ group, scales = "free") +
+     coord_flip() +
+     theme_classic() +
+     scale_x_continuous(breaks = nrow(freq_sources):1,
+                        labels = freq_sources$feature) +
+     labs(x = NULL, y = "Relative frequency")
+
+```
+
+
+As we suspected, geographic mentions may be influencing clustering among geographic news outlets. Exploring top features may also force us to ask ourselves important questions about the data. For example, what bias might we be introducing by examining similarities by source but across all topics? We'll turn to that question at the end of the module.
+
+Now let's try applying cosine similarity to the corpus. A common practice among researchers is to convert cosine similarity scores to "cosine dissimilarity", which can be done by subtracting the cosine similarity scores from 1. We'll do that below in order to compare our two dendrograms using the `apply` function on the matrix object, then converting back to `dist` and `hclust`.
+
+pply functions are a family of functions in base R, which allow us to perform actions on many chunks of data. An apply function is a loop, but it runs faster than loops and often with less code. And, there are different apply() functions.
+
+Note that the `dist` function does not change the values in the output, but makes the object compatible with `hclust`.
+
+
+```{r, message=FALSE}
+
+# Cosine similarity quanteda function  
+news_source_cos_sim = as.dist(textstat_simil(news_dfm_sources, method = "cosine", margin="documents")) 
+print(news_source_cos_sim)
+
+# Create matrix to transform
+news_source_cos_sim = as.matrix(news_source_cos_sim)
+
+# Flip output in each matrix cell and create hclust of distance
+news_source_cos_dist_clust = hclust(as.dist(apply(news_source_cos_sim, 1, function(x) 1 - x)))
+
+# Plot
+ggdendrogram(news_source_cos_dist_clust, rotate = TRUE) +
+  labs( xlab="Similarity", title="Dendogram of News Articles by Source Using Cosine Dissimilarity")
+```
+
+At first glance, patterns seem to be pretty different. But let's examine the sources we examined earlier. Like Euclidean distance, the New York Times and Washington Post are occupying the same branch. Unlike Euclidean distance, the leaves are the smallest in the dendrogram, which suggests these two sources have the least dissimilarity (i.e., the greatest similiarity). We again observe clustering among St Petersburg Times and Palm Beach Post, but Tampa Bay Times is unique from these and the most dissimilar to the remaining sources. 
+
+Uncovering reasons for differences across the two measures would require us to dig into DFMs of each source to identify terms driving results. We might immediately speculate that differing document lengths might distort the Euclidean distance measure as it did in our toy example. We can sum the DFM terms by source to examine document lengths.
+
+```{r, message=FALSE}
+
+# Term count
+
+rowSums(news_dfm_sources, -1)
+
+```
+Both New York Times and Washington Post have substantially longer term lists (document lengths) than other news outlets, suggesting that we should rely more heavily on the cosine similarity analysis.
+
+---
+
+**Question 2: Re-tokenize the news corpus but leave stopwords. Calculate cosine dissimiliarity and plot the new dendrogram. What differences or similiarities do we observe?**
+    
+---
+
+### Pairwise comparisons across individual documents
+
+For purposes of hypothesis testing, we typically want to calculate similarity at the individual level and compare pairwise by group. In other words, we don't want to lose the variation across individual news media articles that make up different sources. There may be important -- and consequential -- variation in the sub-units (in this case, articles) that underlie the groups (in this case, news media sources). Nested data is extremely common in social sciences research. Legislators are nested in committees and chambers. Planning documents are nested in regional commissions. Public testimony is nested in policy issue domains. 
+
+Below, we retain article variation to explore whether articles with the same keyword tags are more similiar to each other than to one another. The news data we've been working wih was generated by webscraping ProQuest for any news article with a series of keywords related to six topics: gun control, abortion, same sex marriage, immigration, climate change, and the death penalty. Given the data generation process (DGP), we would expect news articles tagged with the same keywords (essentially topics) to be more similar to one another.
+
+```{r, message=FALSE}
+
+# Cosine similiarity without grouping
+news_cos_sim = textstat_simil(news_dfm, method = "cosine")
+
+```
+
+
+Without grouping, we're working with a very large set of matrix objects: 1000 observations compared to all other observations (1000*1000) = 100,000 text similarity observations. What do we do to make comparisons across groups, then? We can transform the text similarity object produced in `quanteda` to large matrix, then a list of pairs, which can then be plotted and used in hypothesis testing (e.g., t-test of two groups or regression modeling). The `text reuse` package offers more direct transformation options but we'll walk you through we might call a "hack", or the creative use of multiple, unrelated packages and critical thinking to make use of text-as-data output.
+
+When creating the pairwise list, we should first think about how many pairs we expect to observe. This is a combinatorics problem. We do not want to observe diagnols, repeated pairs (e.g., text1 and text2, text2 and text1), or both sides of the symmetrical matrix (which also produces . Where $n$ is the total amount in the set (total documents) and $r$ is the amount in each sub-set (pairs), the formula for all possible combinations is:
+
+<center>
+Combinations = $\frac{n!}{r! * (n-r)!}$
+</center>
+
+You can use a [combination calculator](https://www.calculator.net/permutation-and-combination-calculator.html?cnv=36&crv=2&x=73&y=19) to generate the pair combinations we should observe. In our example, $n$ = 1,000 and $r$ is 2. Thus, we should have 499,500 pairs.
+
+There are likely other ways to approach this problem, but we use the `graph_from_adjacency_matrix` from the `igraph` package (typically used for network analysis) to generate a pair list. Specifying option `weighted` retains the text similarity scores, the option `diag` removes the diagnols (1s in this case) when `FALSE` and the option `mode` keeps only the `upper` or `lower` triangles when specified.
+
+CORY: Write in what as_long_data_frame does
+
+```{r, message=FALSE}
+
+# First convert text sim object to matrix
+news_cos_matrix = as.matrix(news_cos_sim) 
+
+# View text1-text989 - received a score of 0
+all_pairs = as_long_data_frame(graph_from_adjacency_matrix(news_cos_matrix, weighted = TRUE, diag = FALSE, mode = "upper")) 
+all_pairs = all_pairs[3:5]
+colnames(all_pairs) = c("similarity", "doc_id_keep1", "doc_id_keep2")
+
+```
+
+How many observations are in our `all_pairs` df? Not 499,500! What happened? We have to look at the data. One of our first instincts when data goes missing in transformations should be to look check whether NAs or 0s were dropped. 
+
+```{r, message=FALSE}
+
+# Examine part of matrix
+news_cos_matrix[1,900:1000]
+
+```
+
+Note, we observe a 0 value for text1:text 989. Now, let's observe that pair and a couple others in the all_pairs transformation.
+
+```{r, message=FALSE}
+
+all_pairs[grepl("\\btext1\\b",all_pairs$doc_id_keep1) & grepl("\\btext989\\b",all_pairs$doc_id_keep2),]
+all_pairs[grepl("\\btext1\\b",all_pairs$doc_id_keep1) & grepl("\\btext2\\b",all_pairs$doc_id_keep2),]
+all_pairs[grepl("\\btext14\\b",all_pairs$doc_id_keep1) & grepl("\\btext22\\b",all_pairs$doc_id_keep2),]
+
+```
+
+There is no value for text1:text 989 in the transformation dataframe! We can develop a "work around" (more common than you realize) to retain those zeros in the pairs list. The work around we use is assigning 999 (importantly, a value that's impossible for cosine similiarity to produce) to the zeros in the matrix and then switching them back in the pairs list.
+
+```{r, message=FALSE}
+
+# Assign 999 to 0s in matrix object, then check
+news_cos_matrix[news_cos_matrix == 0.00000000 ] = 999
+news_cos_matrix[1,900:1000]
+
+```
+
+Now the text1-text989 pair (and all other 0s) are 999. Let's retry creating the pair list:
+  
+```{r, message=FALSE}
+
+# Get pairs again
+all_pairs = as_long_data_frame(graph_from_adjacency_matrix(news_cos_matrix, weighted = TRUE, diag = FALSE, mode = "upper"))
+all_pairs = all_pairs[3:5]
+colnames(all_pairs) = c("similarity", "doc_id_keep1", "doc_id_keep2")
+    # A match! 499,500 values
+
+# Assign 0 back
+all_pairs[all_pairs == 999] = 0
+
+# Check to make sure those 999 are gone
+all_pairs[grepl("\\btext1\\b",all_pairs$doc_id_keep1) & grepl("\\btext989\\b",all_pairs$doc_id_keep2),]
+
+# View pairlist
+head(all_pairs, 10)
+
+```
+
+Now that we have our pairs list, how do we know which text corresponds with what keyword (or source or other doc var for that matter)? There are a few ways we might tackle this issue. One way would be to create a unique doc_id includes the information we want to retain when we create the corpus. Another way is to merge in docvar information, carefully.
+
+Given our research question (are articles tagged by the same keyword more or less similar than articles tagged by different ones), we need to attach the keyword docvar to each of the two documents used to calculate cosine similiarity. Here's one way we could go about this hack:
+
+```{r, message=FALSE}
+
+# Grab docvars we need - keep it simple! 
+news_docvars = docvars(news_corp)
+news_keyword = news_docvars %>%
+  select(keyword, doc_id_keep)
+head(news_keyword, 10)
+
+# Left join (merge) first source
+all_pairs_merge1 = news_keyword %>%
+    left_join(all_pairs, by=c('doc_id_keep'='doc_id_keep1')) %>%
+    rename(keyword_doc_id1 = keyword)
+head(all_pairs_merge1, 10)
+
+# FIX!!! for some reason, text1000 has NA for similarity and doc_id_keep2 in this step. I cannot figure it out and it is killing me
+  
+# Left join (merge) second source
+all_pairs_merge2 = all_pairs_merge1 %>%
+    left_join(news_keyword, by=c('doc_id_keep2'='doc_id_keep'))  %>%
+    rename(keyword_doc_id2 = keyword)
+head(all_pairs_merge2, 10)
+
+```
+
+Check out our more informative dataframe. Now we know whether the cosine similarity score represents a comparison across the same topics (e.g., immigration-immigration) or different ones (e.g., immigration-deathpenalty). We can create a variable `match` to create a new variable ("keyword_pair") that gives the keyword of all matched pairs and assigns the string "unmatched" to unmatched pairs.
+
+```{r, message=FALSE}
+
+# create match and assign "unmatched" value
+all_pairs_merge2$match = all_pairs_merge2$keyword_doc_id1 == all_pairs_merge2$keyword_doc_id2
+
+# New variable
+all_pairs_merge2$keyword_pair = as.character(NA)
+all_pairs_merge2$keyword_pair = ifelse(all_pairs_merge2$match==TRUE, all_pairs_merge2$keyword_doc_id1, "unmatched") 
+head(all_pairs_merge2, 10)
+
+```
+
+Now we can use boxplots and a mean summary to investigate whether stories gathered by the same keyword are more similar to those that are not.
+
+```{r, message=FALSE}
+
+### DROPPING NA HERE BUT IDEALLY RESOLVE WITHOUT THIS -- FIXXXXX
+all_pairs_merge2 = subset(all_pairs_merge2, !is.na(similarity))
+
+# Plot
+ggplot(all_pairs_merge2, aes(keyword_pair, similarity)) + 
+    geom_boxplot(outlier.size = 0) + 
+    geom_jitter(aes(keyword_pair, similarity), 
+                position = position_jitter(width = 0.4, height = 0), 
+                alpha = 0.1, size = 0.2, show.legend = F) + 
+    theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) + 
+    xlab("Topic") + ylab("Similarity") + 
+    ggtitle("Similarity by Keyword (Topic)") +
+    theme_classic()
+
+# mean similarity
+aggregate(similarity ~ keyword_pair, data = all_pairs_merge2, mean)
+
+```
+
+The boxplots and mean similarity scores provide evidence that articles within a keyword topic are more similiar to those umatched. Articles concerning same sex marriage and gun control are most similiar to one another. The next step in such an analysis would be conducting appropriate statistical tests (e.g., t-test, ANOVA).
+
+In closing, we want to emphasize the potential in the `text reuse` package. While outside the scope of this class, it offers canned functions for pairwise comparisons as well as other text similarity approaches for large corpora, including minhashing and text alignment.
+
+
+\
+
+---
+
+**Question 3: Subset the news corpus into a single topic (keyword) that interests you. Using cosine similarity, examine whether articles produced by the same source are more or less similar than articles produced by different sources. Are articles produced by any one source more or less similar than another?**
+    
+---
+
+\
+
+
