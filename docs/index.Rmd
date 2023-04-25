@@ -48,7 +48,7 @@ getwd() # view working directory
 
 Most text similarity methods are vector space models, which use linear algebra to more directly leverage word counts to represent meaningful differences (or lack thereof) between two or more texts. Unlike dictionary methods, which count and emphasize terms the researcher designates, text similarity uses _all terms_ in a vector (i.e., the document converted to a row in a dfm) to evaluate similarity -- ignoring the latent concept driving the frequent or infrequent use of equivelent terms. For this reason, crafting the dfm carefully in the pre-processing stage is essential.
 
-`quanteda` offers two functions related to text (dis)similarity. Both return a _D_ x _D_ symmetrical matrix, where _D_ is equal to the number of documents (however grouped) in the corpus. 
+`quanteda` offers two functions related to text (dis)similarity. Both return a _D_ x _D_ symmetrical matrix, where _D_ is equal to the number of documents (however grouped) in the corpus, and each cell represents the similarity or distance between two text vectors.
 
 Let's begin with a toy example, completing pre-processing steps as usual. Note that removing stopwords are particularly important in text similarity approaches because stopwords will drive similarity between texts despite being conceptually meaningless.
 
@@ -182,6 +182,7 @@ print(exp_simil)
 ```
 Before, position2 and position4 were most similar (0.309). Like Euclidean distance, the value has changed but not as much. Now, position2 and position4 (0.227) are less similar than position1 and position3 (0.289) but not position1 and position2 (0.154).
 
+\
 
 ### Visualization through hierarchical clustering
 
@@ -317,11 +318,16 @@ rowSums(news_dfm_sources, -1)
 ```
 Both New York Times and Washington Post have substantially longer term lists (document lengths) than other news outlets, suggesting that we should rely more heavily on the cosine similarity analysis.
 
+
+\
+
 ---
 
 **Question 2: Re-tokenize the news corpus but leave stopwords. Calculate cosine dissimiliarity and plot the new dendrogram. What differences or similiarities do we observe?**
     
 ---
+
+\
 
 ### Pairwise comparisons across individual documents
 
