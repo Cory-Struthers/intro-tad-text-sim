@@ -110,7 +110,7 @@ The output suggests position2 and position3 are most distant from one another (3
 
 ---
 
-**Question 1: Based on the text, do you agree with this assessment or other calculated values based on the text? Why or why not?**
+**Question 1. Based on the text, do you agree with this assessment or other calculated values based on the text? Why or why not?**
 
 ---
 
@@ -202,7 +202,7 @@ news_toks = news_corp %>%
            remove_symbols = TRUE) %>%
   tokens_remove(stopwords("en")) # remove stopwords in tokens
 
-# Identify collocations
+# Identify capitalized collocations
 news_cols = tokens_select(news_toks, pattern = "^[A-Z]", 
                                 valuetype = "regex", 
                                 case_insensitive = FALSE) %>% 
@@ -250,7 +250,7 @@ Note that the left-right orientation is irrelevant and that dendrograms cannot t
 
 # Plot dendrogram
 ggdendrogram(news_source_clust, rotate = TRUE) +
-  labs( xlab="Distance", title="Dendogram of News Articles by Source Using Euclidean Distance")
+  labs( xlab="Distance", title="Dendogram of News Articles by Source, Euclidean Distance")
 
 ```
 
@@ -302,7 +302,7 @@ news_source_cos_dist_clust = hclust(as.dist(apply(news_source_cos_sim, 1, functi
 
 # Plot
 ggdendrogram(news_source_cos_dist_clust, rotate = TRUE) +
-  labs( xlab="Similarity", title="Dendogram of News Articles by Source Using Cosine Dissimilarity")
+  labs( xlab="Similarity", title="Dendogram of News Articles by Source, Cosine Dissimilarity")
 ```
 
 At first glance, patterns seem to be pretty different. But let's examine the sources we examined earlier. Like Euclidean distance, the New York Times and Washington Post are occupying the same branch. Unlike Euclidean distance, the leaves are the smallest in the dendrogram, which suggests these two sources have the least dissimilarity (i.e., the greatest similiarity). We again observe clustering among St Petersburg Times and Palm Beach Post, but Tampa Bay Times is unique from these and the most dissimilar to the remaining sources. 
@@ -312,22 +312,11 @@ Uncovering reasons for differences across the two measures would require us to d
 ```{r, message=FALSE}
 
 # Term count
-
 rowSums(news_dfm_sources, -1)
 
 ```
 Both New York Times and Washington Post have substantially longer term lists (document lengths) than other news outlets, suggesting that we should rely more heavily on the cosine similarity analysis.
 
-
-\
-
----
-
-**Question 2: Re-tokenize the news corpus but leave stopwords. Calculate cosine dissimiliarity and plot the new dendrogram. What differences or similiarities do we observe?**
-    
----
-
-\
 
 ### Pairwise comparisons across individual documents
 
@@ -355,14 +344,12 @@ You can use a [combination calculator](https://www.calculator.net/permutation-an
 
 There are likely other ways to approach this problem, but we use the `graph_from_adjacency_matrix` from the `igraph` package (typically used for network analysis) to generate a pair list. Specifying option `weighted` retains the text similarity scores, the option `diag` removes the diagnols (1s in this case) when `FALSE` and the option `mode` keeps only the `upper` or `lower` triangles when specified.
 
-CORY: Write in what as_long_data_frame does
-
 ```{r, message=FALSE}
 
 # First convert text sim object to matrix
 news_cos_matrix = as.matrix(news_cos_sim) 
 
-# View text1-text989 - received a score of 0
+# Transform to graph adjacency matrix, then make long format
 all_pairs = as_long_data_frame(graph_from_adjacency_matrix(news_cos_matrix, weighted = TRUE, diag = FALSE, mode = "upper")) 
 all_pairs = all_pairs[3:5]
 colnames(all_pairs) = c("similarity", "doc_id_keep1", "doc_id_keep2")
@@ -436,9 +423,8 @@ all_pairs_merge1 = news_keyword %>%
     left_join(all_pairs, by=c('doc_id_keep'='doc_id_keep1')) %>%
     rename(keyword_doc_id1 = keyword)
 head(all_pairs_merge1, 10)
+summary(all_pairs_merge1)
 
-# FIX!!! for some reason, text1000 has NA for similarity and doc_id_keep2 in this step. I cannot figure it out and it is killing me
-  
 # Left join (merge) second source
 all_pairs_merge2 = all_pairs_merge1 %>%
     left_join(news_keyword, by=c('doc_id_keep2'='doc_id_keep'))  %>%
@@ -451,7 +437,7 @@ Check out our more informative dataframe. Now we know whether the cosine similar
 
 ```{r, message=FALSE}
 
-# create match and assign "unmatched" value
+# Create match and assign "unmatched" value
 all_pairs_merge2$match = all_pairs_merge2$keyword_doc_id1 == all_pairs_merge2$keyword_doc_id2
 
 # New variable
@@ -461,11 +447,17 @@ head(all_pairs_merge2, 10)
 
 ```
 
-Now we can use boxplots and a mean summary to investigate whether stories gathered by the same keyword are more similar to those that are not.
+Now we can use boxplots and a mean summary to investigate whether stories gathered by the same keyword are more similar to those that are not. But first:
+
+**Question 2: Huh, an extra row in our dataframe. Why does that happen (499,501, instead of 499,500)?**
+
 
 ```{r, message=FALSE}
 
-### DROPPING NA HERE BUT IDEALLY RESOLVE WITHOUT THIS -- FIXXXXX
+# Look for NA value
+subset(all_pairs_merge2, is.na(similarity))
+
+# Dropping already matched
 all_pairs_merge2 = subset(all_pairs_merge2, !is.na(similarity))
 
 # Plot
@@ -486,14 +478,18 @@ aggregate(similarity ~ keyword_pair, data = all_pairs_merge2, mean)
 
 The boxplots and mean similarity scores provide evidence that articles within a keyword topic are more similiar to those umatched. Articles concerning same sex marriage and gun control are most similiar to one another. The next step in such an analysis would be conducting appropriate statistical tests (e.g., t-test, ANOVA).
 
-In closing, we want to emphasize the potential in the `text reuse` package. While outside the scope of this class, it offers canned functions for pairwise comparisons as well as other text similarity approaches for large corpora, including minhashing and text alignment.
+In closing, we want to emphasize the great utility of the `text reuse` package. While outside the scope of this class, it offers canned functions for pairwise comparisons as well as other text similarity approaches for large corpora, including minhashing and text alignment.
 
 
 \
 
 ---
 
-**Question 3: Subset the news corpus into a single topic (keyword) that interests you. Using cosine similarity, examine whether articles produced by the same source are more or less similar than articles produced by different sources. Are articles produced by any one source more or less similar than another?**
+**Question 2 (BREAKOUT). Re-tokenize the news corpus but *leave* stopwords in the dfm. Calculate cosine dissimiliarity by group (source) and plot an updated dendrogram. What differences or similiarities do you observe? Why?**
+    
+---
+
+**Question 3 (BREAKOUT). Subset the news corpus into a single topic (keyword) that interests you. Using cosine similarity, examine whether *articles* produced by the same source are more or less similar than *articles* produced by different sources. What do you find?**
     
 ---
 
