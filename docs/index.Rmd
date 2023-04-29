@@ -125,7 +125,7 @@ Now let's do apply cosine similarity using `textstat_simil`. The cosine similari
 Cosine similarity = $\frac{ \boldsymbol{a}}{|| \boldsymbol{a}||}.\frac{ \boldsymbol{b}}{|| \boldsymbol{b}||} = \frac{\sum_ia_ib_i}{(\sqrt{\sum_ia^2_i}(\sqrt{\sum_ib^2_i}}$
 </center>
 
-Cosine similarity scores range from -1 to 1 for word frequencies. The inverse of euclidean distance, larger values in cosine similarity indicate greater similarity, or less distance, while smaller values mean less similarly, or greater distance. Methods options for `textstat_simil` include `cosine`, `correlation`, `jaccard`, among others. `cosine` is the default and currently the most popular.
+Cosine similarity scores range from 0 to 1 for word frequencies. The inverse of Euclidean distance, larger values in cosine similarity indicate greater similarity, or less distance, while smaller values mean less similarly, or greater distance. Methods options for `textstat_simil` include `cosine`, `correlation`, `jaccard`, among others. `cosine` is the default and currently the most popular.
 
 ```{r, message=FALSE}
 
@@ -145,7 +145,7 @@ cosine_sim(energy_dfm_reshaped$position2, energy_dfm_reshaped$position3)
 
 ```
 
-This output suggests position2 and position3 are least similar (0.134), whereas position2 and position4 are most similar (0.309). Aha! The two approaches produce nearly equivalent results, but mirroring one another. Reviewing the texts in our toy example, we might imagine that a researcher has asked respondents to describe their position on energy policy in an open-ended survey question. In addition to understanding the latent dimensions people care about in regards to this policy domain, the researcher might hypothesize that respondents with similar attributes (ideology, class) offer similar responses. This point brings us back again to grouping and nestedness in our data, which we'll revisit shortly.
+This output suggests position2 and position3 are least similar (0.134), whereas position2 and position4 are most similar (0.401). Aha! The two approaches produce nearly equivalent results, but mirroring one another. Reviewing the texts in our toy example, we might imagine that a researcher has asked respondents to describe their position on energy policy in an open-ended survey question. In addition to understanding the latent dimensions people care about in regards to this policy domain, the researcher might hypothesize that respondents with similar attributes (ideology, class) offer similar responses. This point brings us back again to grouping and nestedness in our data, which we'll revisit shortly.
 
 One reason cosine similarity is often used over Euclidean distance for larger corpora is the former normalizes for magnitude, or document length, by comparing the angle of the vectors. Let's experiment with our toy example to see what happens when we make position4 a much longer document.
 
@@ -283,7 +283,7 @@ As we suspected, geographic mentions may be influencing clustering among geograp
 
 Now let's try applying cosine similarity to the corpus. A common practice among researchers is to convert cosine similarity scores to "cosine dissimilarity", which can be done by subtracting the cosine similarity scores from 1. We'll do that below in order to compare our two dendrograms using the `apply` function on the matrix object, then converting back to `dist` and `hclust`.
 
-pply functions are a family of functions in base R, which allow us to perform actions on many chunks of data. An apply function is a loop, but it runs faster than loops and often with less code. And, there are different apply() functions.
+Apply functions are a family of functions in base R, which allow us to perform actions on many chunks of data. An apply function is a loop, but it runs faster than loops and often with less code. And, there are different apply() functions.
 
 Note that the `dist` function does not change the values in the output, but makes the object compatible with `hclust`.
 
@@ -332,7 +332,7 @@ news_cos_sim = textstat_simil(news_dfm, method = "cosine")
 ```
 
 
-Without grouping, we're working with a very large set of matrix objects: 1000 observations compared to all other observations (1000*1000) = 100,000 text similarity observations. What do we do to make comparisons across groups, then? We can transform the text similarity object produced in `quanteda` to large matrix, then a list of pairs, which can then be plotted and used in hypothesis testing (e.g., t-test of two groups or regression modeling). The `text reuse` package offers more direct transformation options but we'll walk you through we might call a "hack", or the creative use of multiple, unrelated packages and critical thinking to make use of text-as-data output.
+Without grouping, we're working with a very large set of matrix objects: 1000 observations compared to all other observations (1000*1000) = 100,000 text similarity observations. What do we do to make comparisons across groups, then? We can transform the text similarity object produced in `quanteda` to large matrix, then a list of pairs, which can then be plotted and used in hypothesis testing (e.g., t-test of two groups or regression modeling). The `textreuse` package offers more direct transformation options but we'll walk you through we might call a "hack", or the creative use of multiple, unrelated packages and critical thinking to make use of text-as-data output.
 
 When creating the pairwise list, we should first think about how many pairs we expect to observe. This is a combinatorics problem. We do not want to observe diagnols, repeated pairs (e.g., text1 and text2, text2 and text1), or both sides of the symmetrical matrix (which also produces . Where $n$ is the total amount in the set (total documents) and $r$ is the amount in each sub-set (pairs), the formula for all possible combinations is:
 
@@ -353,6 +353,7 @@ news_cos_matrix = as.matrix(news_cos_sim)
 all_pairs = as_long_data_frame(graph_from_adjacency_matrix(news_cos_matrix, weighted = TRUE, diag = FALSE, mode = "upper")) 
 all_pairs = all_pairs[3:5]
 colnames(all_pairs) = c("similarity", "doc_id_keep1", "doc_id_keep2")
+head(all_pairs)
 
 ```
 
@@ -478,7 +479,7 @@ aggregate(similarity ~ keyword_pair, data = all_pairs_merge2, mean)
 
 The boxplots and mean similarity scores provide evidence that articles within a keyword topic are more similiar to those umatched. Articles concerning same sex marriage and gun control are most similiar to one another. The next step in such an analysis would be conducting appropriate statistical tests (e.g., t-test, ANOVA).
 
-In closing, we want to emphasize the great utility of the `text reuse` package. While outside the scope of this class, it offers canned functions for pairwise comparisons as well as other text similarity approaches for large corpora, including minhashing and text alignment.
+In closing, we want to emphasize the great utility of the `textreuse` package. While outside the scope of this class, it offers canned functions for pairwise comparisons as well as other text similarity approaches for large corpora, including minhashing and text alignment.
 
 
 \
